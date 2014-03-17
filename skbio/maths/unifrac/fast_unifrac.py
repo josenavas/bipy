@@ -164,6 +164,11 @@ class FastUniFrac(object):
         for i, s in self._bound_indices:
             i[:] = f(s, 0)
 
+    def _bool_descendants(self):
+        """For each internal node, sets col to True if any descendant is True
+        """
+        self._traverse_reduce(np.logical_or.reduce)
+
     def _metric(self, i, j):
         """"""
         raise NotImplementedError()
@@ -177,8 +182,8 @@ class SymmetricFastUniFrac(FastUniFrac):
     """"""
     def matrix(self):
         """Returns a SymmetricDistanceMatrix with the UniFrac distances"""
-        num_cols = self._count_array[-1]
-        cols = [m[:, i] for i in range(num_cols)]
+        num_cols = self._count_array.shape[-1]
+        cols = [self._count_array[:, i] for i in range(num_cols)]
         result = np.zeros((num_cols, num_cols), float)
         # Since unifrac is symmetric, only calc half matrix and transpose
         for i in range(1, num_cols):
@@ -195,7 +200,20 @@ class SymmetricFastUniFrac(FastUniFrac):
 
 class AsymmetricFastUniFrac(FastUniFrac):
     """"""
-    pass
+    def __init__(self, **kwargs):
+        super(AsymmetricFastUniFrac, self).__init__(**kwargs)
+        self._bool_descendants()
+
+    def matrix(self):
+        """Returns a DistanceMatrix with the UniFrac distances"""
+        num_cols = self._count_array.shape[-1]
+        cols = [self._count_array[:, i] for i in range(num_cols)]
+        result = np.zeros((num_cols, num_cols), float)
+        for i in range(num_cols):
+            first_col = cols[i]
+            result[i] = [self._metric(first_col, cols[j])
+                         for j in range(num_cols)]
+        return DistanceMatrix(result, self._env_names)
 
 
 class UnweightedFastUniFrac(SymmetricFastUniFrac):
@@ -203,11 +221,6 @@ class UnweightedFastUniFrac(SymmetricFastUniFrac):
     def __init__(self, **kwargs):
         super(UnweightedFastUniFrac, self).__init__(**kwargs)
         self._bool_descendants()
-
-    def _bool_descendants(self):
-        """For each internal node, sets col to True if any descendant is True
-        """
-        self._traverse_reduce(np.logical_or.reduce)
 
     def _metric(self, i, j):
         """Calculates unifrac(i,j) from branch_lengths and cols i and j of the
@@ -229,6 +242,14 @@ class UnweightedFastUniFrac(SymmetricFastUniFrac):
         """
         return 1 - ((self._branch_lengths * np.logical_and(i, j)).sum() /
                     (self._branch_lengths * np.logical_or(i, j)).sum())
+
+
+class UnweightedFastUniFracFullTree(UnweightedFastUniFrac):
+    """"""
+    def _metric(self, i, j):
+        """UniFrac, but omits normalization for frac of tree covered"""
+        return ((self._branch_lengths * np.logical_xor(i, j)).sum() /
+                self._branch_lengths.sum())
 
 
 class WeightedFastUniFrac(SymmetricFastUniFrac):
@@ -303,3 +324,21 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
             result[i, :j+1] = row_result
         result = result + np.transpose(result)
         return SymmetricDistanceMatrix(result, self._env_names)
+
+
+class GFastUniFrac(AsymmetricFastUniFrac):
+    """"""
+    def _metric(self, i, j):
+        """Calculates G(i,j) from branch_lengths and cols i,j of abund_mtx"""
+        return ((self._branch_lengths *
+                 np.logical_and(i, np.logical_not(j))).sum() /
+                (self._branch_lengths * np.logical_or(i, j)).sum())
+
+
+class GFastUniFracFullTree(AsymmetricFastUniFrac):
+    """docstring for GFastUniFracFullTree"""
+    def _metric(self, i, j):
+        """"""
+        return ((self.branch_lengths *
+                 np.logical_and(i, logical_not(j))).sum() /
+                self._branch_lengths.sum())
