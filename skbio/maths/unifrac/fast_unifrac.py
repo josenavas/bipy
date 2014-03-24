@@ -13,6 +13,11 @@
 import numpy as np
 
 from skbio.core.distance import SymmetricDistanceMatrix
+from skbio.maths.unifrac.metrics import (unweighted_unifrac,
+                                         unweighted_unifrac_full_tree,
+                                         weighted_unifrac,
+                                         normalized_weighted_unifrac,
+                                         G, G_full_tree)
 
 
 class FastUniFrac(object):
@@ -180,6 +185,7 @@ class FastUniFrac(object):
 
 class SymmetricFastUniFrac(FastUniFrac):
     """"""
+
     def matrix(self):
         """Returns a SymmetricDistanceMatrix with the UniFrac distances"""
         num_cols = self._count_array.shape[-1]
@@ -240,23 +246,20 @@ class UnweightedFastUniFrac(SymmetricFastUniFrac):
             Should be a slice of states of the abundance matrix, same length
             as # nodes in tree
         """
-        return 1 - ((self._branch_lengths * np.logical_and(i, j)).sum() /
-                    (self._branch_lengths * np.logical_or(i, j)).sum())
+        return unweighted_unifrac(self._branch_lengths, i, j)
 
 
 class UnweightedFastUniFracFullTree(UnweightedFastUniFrac):
     """"""
     def _metric(self, i, j):
         """UniFrac, but omits normalization for frac of tree covered"""
-        return ((self._branch_lengths * np.logical_xor(i, j)).sum() /
-                self._branch_lengths.sum())
+        return unweighted_unifrac_full_tree(self._branch_lengths, i, j)
 
 
 class WeightedFastUniFrac(SymmetricFastUniFrac):
     """"""
-    def __init__(self, bl_correct=False, **kwargs):
+    def __init__(self, **kwargs):
         super(WeightedFastUniFrac, self).__init__(**kwargs)
-        self._bl_correct = bl_correct
         self._tip_indices = [n._lead_index for n in self.tree.tips()]
         self._sum_descendants()
         self._tip_ds = self._branch_lengths.copy()[:, np.newaxis]
@@ -291,25 +294,19 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
         np.put(mask, self._tip_indices, 1)
         a *= mask[:, np.newaxis]
 
-    def _metric(self, first_col, second_col, i_sum, j_sum):
+    def _metric(self, i, j, i_sum, j_sum):
         """Calculates weighted unifrac(i, j) from branch_lengths and cols i,j
         of abund_mtx.
 
         It performs branch length correction if self._bl_correct = True
         """
-        result = (self._branch_lengths * np.abs((i / np.float(i_sum)) -
-                  (j / np.float(j_sum)))).sum()
-        if self._bl_correct:
-            corr = self._tip_distances.ravel() * ((i/np.float(i_sum)) +
-                                                  (j/np.float(j_sum)))
-            result /= corr.sum()
-        return result
+        return weighted_unifrac(self._branch_lengths, i, j, i_sum, j_sum)
 
     def matrix(self):
         """Calculates weighted_unifrac(i, j) for all i, j in abund_mtx"""
         num_cols = self._count_array.shape[-1]
         cols = [self._count_array[:, i] for i in range(num_cols)]
-        sums = [take(self._count_array[:, i], self._tip_indices).sum()
+        sums = [np.take(self._count_array[:, i], self._tip_indices).sum()
                 for i in range(num_cols)]
         result = np.zeros((num_cols, num_cols), float)
         for i in range(1, num_cols):
@@ -326,19 +323,27 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
         return SymmetricDistanceMatrix(result, self._env_names)
 
 
+class NormalizedWeightedFastUniFrac(WeightedFastUniFrac):
+    """"""
+    def _metric(self, i, j, i_sum, j_sum):
+        """Calculates weighted unifrac(i, j) from branch_lengths and cols i,j
+        of abund_mtx.
+
+        It performs branch length correction if self._bl_correct = True
+        """
+        return weighted_unifrac(self._branch_lengths, i, j, i_sum, j_sum,
+                                self._tip_distances)
+
+
 class GFastUniFrac(AsymmetricFastUniFrac):
     """"""
     def _metric(self, i, j):
         """Calculates G(i,j) from branch_lengths and cols i,j of abund_mtx"""
-        return ((self._branch_lengths *
-                 np.logical_and(i, np.logical_not(j))).sum() /
-                (self._branch_lengths * np.logical_or(i, j)).sum())
+        return G(self._branch_lengths, i, j)
 
 
 class GFastUniFracFullTree(AsymmetricFastUniFrac):
     """docstring for GFastUniFracFullTree"""
     def _metric(self, i, j):
         """"""
-        return ((self.branch_lengths *
-                 np.logical_and(i, logical_not(j))).sum() /
-                self._branch_lengths.sum())
+        return G_full_tree(self._branch_lengths, i, j)
