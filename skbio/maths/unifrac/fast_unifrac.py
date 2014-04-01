@@ -9,15 +9,16 @@
 #-----------------------------------------------------------------------------
 
 """Fast implementation of UniFrac for use with very large datasets"""
+from __future__ import division
 
 import numpy as np
 
-from skbio.core.distance import SymmetricDistanceMatrix
+from skbio.core.distance import SymmetricDistanceMatrix, DistanceMatrix
 from skbio.maths.unifrac.metrics import (unweighted_unifrac,
-                                         unweighted_unifrac_full_tree,
+                                         unnormalized_unweighted_unifrac,
                                          weighted_unifrac,
-                                         normalized_weighted_unifrac,
-                                         G, G_full_tree)
+                                         corrected_weighted_unifrac,
+                                         G, unnormalized_G)
 
 
 class FastUniFrac(object):
@@ -26,12 +27,14 @@ class FastUniFrac(object):
     ----------
     t : UniFracTree
         Phylogenetic tree relating the sequences
-    abund_mtx :
-        TODO
-    sample_ids :
-        TODO
-    taxon_ids :
-        TODO
+    abund_mtx : 2d array
+        samples (rows) by seqs (columns) numpy 2d array
+    sample_ids : list of strings
+        list with the sample ids. Its length should be the number of rows
+        on abund_mtx
+    taxon_ids : list of strings
+        list with the taxon ids. Its length should be the number of columns
+        on abund_mtx
     make_subtree : bool
         If true, prune the tree to only include the nodes that appear on envs
 
@@ -42,14 +45,14 @@ class FastUniFrac(object):
         """Sets up all the internal variables"""
         self._make_envs_dict(abund_mtx, sample_ids, taxon_ids)
 
-        self._tree = t.copy()
+        self._tree = t.deepcopy()
         if make_subtree:
             self._make_subtree()
 
         # get good nodes, defined as those that are in envs
-        self._envs = dict([(i.Name, self._envs[i.Name])
+        self._envs = dict([(i.name, self._envs[i.name])
                            for i in self._tree.tips()
-                           if i.Name in self._envs])
+                           if i.name in self._envs])
         if not self._envs:
             raise ValueError("No valid samples/environments found. Check "
                              "whether tree tips match otus/taxa present in "
@@ -66,8 +69,8 @@ class FastUniFrac(object):
         self._branch_lengths = np.zeros(len(self._node_index), float)
         for i, node in self._node_index.items():
             try:
-                if node.Length is not None:
-                    self._branch_lengths = node.Length
+                if node.length is not None:
+                    self._branch_lengths[i] = node.length
             except AttributeError:
                 pass
 
@@ -104,11 +107,11 @@ class FastUniFrac(object):
         wanted = set(self._envs.keys())
 
         def delete_test(node):
-            if node.istip() and node.Name not in wanted:
+            if node.is_tip() and node.name not in wanted:
                 return True
             return False
 
-        self._tree.removeDeleted(delete_test)
+        self._tree.remove_deleted(delete_test)
         self._tree.prune()
 
     def _index_envs(self):
@@ -125,8 +128,8 @@ class FastUniFrac(object):
         # figure out taxon label to index map
         self._node_to_index = {}
         for i, node in self._node_index.items():
-            if node.Name is not None:
-                self._node_to_index[node.Name] = i
+            if node.name is not None:
+                self._node_to_index[node.name] = i
         # walk over env_counts, adding correct slots in array
         num_nodes = len(self._node_index)
         num_envs = len(self._unique_envs)
@@ -174,19 +177,11 @@ class FastUniFrac(object):
         """
         self._traverse_reduce(np.logical_or.reduce)
 
-    def _metric(self, i, j):
-        """"""
-        raise NotImplementedError()
+    def _sum_descendants(self):
+        """For each internal node, sets col to sum of values in descendants"""
+        self._traverse_reduce(np.sum)
 
-    def matrix(self):
-        """"""
-        raise NotImplementedError
-
-
-class SymmetricFastUniFrac(FastUniFrac):
-    """"""
-
-    def matrix(self):
+    def _symmetric_matrix(self):
         """Returns a SymmetricDistanceMatrix with the UniFrac distances"""
         num_cols = self._count_array.shape[-1]
         cols = [self._count_array[:, i] for i in range(num_cols)]
@@ -203,14 +198,7 @@ class SymmetricFastUniFrac(FastUniFrac):
         result = result + np.transpose(result)
         return SymmetricDistanceMatrix(result, self._env_names)
 
-
-class AsymmetricFastUniFrac(FastUniFrac):
-    """"""
-    def __init__(self, **kwargs):
-        super(AsymmetricFastUniFrac, self).__init__(**kwargs)
-        self._bool_descendants()
-
-    def matrix(self):
+    def _asymmetric_matrix(self):
         """Returns a DistanceMatrix with the UniFrac distances"""
         num_cols = self._count_array.shape[-1]
         cols = [self._count_array[:, i] for i in range(num_cols)]
@@ -221,11 +209,21 @@ class AsymmetricFastUniFrac(FastUniFrac):
                          for j in range(num_cols)]
         return DistanceMatrix(result, self._env_names)
 
+    def _metric(self, i, j):
+        """Should be implemented by the subclasses"""
+        raise NotImplementedError("_metric cannot be called on the base class")
 
-class UnweightedFastUniFrac(SymmetricFastUniFrac):
+    def matrix(self):
+        """Should be implemented by the subclasses"""
+        raise NotImplementedError("matrix cannot be called on the base class")
+
+
+class UnweightedFastUniFrac(FastUniFrac):
     """docstring for UnweightedFastUniFrac"""
-    def __init__(self, **kwargs):
-        super(UnweightedFastUniFrac, self).__init__(**kwargs)
+    def __init__(self, t, abund_mtx, sample_ids, taxon_ids, **kwargs):
+        super(UnweightedFastUniFrac, self).__init__(t, abund_mtx,
+                                                    sample_ids, taxon_ids,
+                                                    **kwargs)
         self._bool_descendants()
 
     def _metric(self, i, j):
@@ -248,27 +246,45 @@ class UnweightedFastUniFrac(SymmetricFastUniFrac):
         """
         return unweighted_unifrac(self._branch_lengths, i, j)
 
+    def matrix(self):
+        return self._symmetric_matrix()
 
-class UnweightedFastUniFracFullTree(UnweightedFastUniFrac):
+
+class UnnormalizedUnweightedFastUniFrac(UnweightedFastUniFrac):
     """"""
     def _metric(self, i, j):
         """UniFrac, but omits normalization for frac of tree covered"""
-        return unweighted_unifrac_full_tree(self._branch_lengths, i, j)
+        return unnormalized_unweighted_unifrac(self._branch_lengths, i, j)
 
 
-class WeightedFastUniFrac(SymmetricFastUniFrac):
+class GFastUniFrac(UnweightedFastUniFrac):
     """"""
-    def __init__(self, **kwargs):
-        super(WeightedFastUniFrac, self).__init__(**kwargs)
-        self._tip_indices = [n._lead_index for n in self.tree.tips()]
+    def _metric(self, i, j):
+        """Calculates G(i,j) from branch_lengths and cols i,j of abund_mtx"""
+        return G(self._branch_lengths, i, j)
+
+    def matrix(self):
+        return self._asymmetric_matrix()
+
+
+class UnnormalizedGFastUnifrac(GFastUniFrac):
+    """docstring for GFastUniFracFullTree"""
+
+    def _metric(self, i, j):
+        """"""
+        return unnormalized_G(self._branch_lengths, i, j)
+
+
+class WeightedFastUniFrac(FastUniFrac):
+    """"""
+    def __init__(self, t, abund_mtx, sample_ids, taxon_ids, **kwargs):
+        super(WeightedFastUniFrac, self).__init__(t, abund_mtx, sample_ids,
+                                                  taxon_ids, **kwargs)
+        self._tip_indices = [n._leaf_index for n in self._tree.tips()]
         self._sum_descendants()
         self._tip_ds = self._branch_lengths.copy()[:, np.newaxis]
         self._bind_to_parent_array()
         self._tip_distances()
-
-    def _sum_descendants(self):
-        """For each internal node, sets col to sum of values in descendants"""
-        self._traverse_reduce(np.sum)
 
     def _bind_to_parent_array(self):
         """Binds tree to tip_ds
@@ -284,7 +300,7 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
         for n in self._tree.traverse(self_before=True, self_after=False):
             if n is not self._tree:
                 self._bindings.append([self._tip_ds[n._leaf_index],
-                                       self._tip_ds[n.Parent._leaf_index]])
+                                       self._tip_ds[n.parent._leaf_index]])
 
     def _tip_distances(self):
         """Sets each tip to its distance from the root"""
@@ -292,7 +308,7 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
             i += s
         mask = np.zeros(len(self._tip_ds))
         np.put(mask, self._tip_indices, 1)
-        a *= mask[:, np.newaxis]
+        self._tip_ds *= mask[:, np.newaxis]
 
     def _metric(self, i, j, i_sum, j_sum):
         """Calculates weighted unifrac(i, j) from branch_lengths and cols i,j
@@ -323,7 +339,7 @@ class WeightedFastUniFrac(SymmetricFastUniFrac):
         return SymmetricDistanceMatrix(result, self._env_names)
 
 
-class NormalizedWeightedFastUniFrac(WeightedFastUniFrac):
+class CorrectedWeightedFastUniFrac(WeightedFastUniFrac):
     """"""
     def _metric(self, i, j, i_sum, j_sum):
         """Calculates weighted unifrac(i, j) from branch_lengths and cols i,j
@@ -331,19 +347,5 @@ class NormalizedWeightedFastUniFrac(WeightedFastUniFrac):
 
         It performs branch length correction if self._bl_correct = True
         """
-        return weighted_unifrac(self._branch_lengths, i, j, i_sum, j_sum,
-                                self._tip_distances)
-
-
-class GFastUniFrac(AsymmetricFastUniFrac):
-    """"""
-    def _metric(self, i, j):
-        """Calculates G(i,j) from branch_lengths and cols i,j of abund_mtx"""
-        return G(self._branch_lengths, i, j)
-
-
-class GFastUniFracFullTree(AsymmetricFastUniFrac):
-    """docstring for GFastUniFracFullTree"""
-    def _metric(self, i, j):
-        """"""
-        return G_full_tree(self._branch_lengths, i, j)
+        return corrected_weighted_unifrac(self._branch_lengths, i, j,
+                                          i_sum, j_sum, self._tip_ds)
