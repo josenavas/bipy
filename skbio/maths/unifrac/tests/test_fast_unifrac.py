@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Copyright (c) 2013--, scikit-bio development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file COPYING.txt, distributed with this software.
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 from unittest import TestCase, main
 import numpy as np
@@ -29,7 +29,15 @@ class BaseFastUniFracTests(TestCase):
     """"""
     def setUp(self):
         """Define test variables"""
-        # Define an abundance matrix
+        # Test case 1
+        self.abund_mtx = np.array([[1, 1, 0, 0, 0],
+                                   [0, 1, 1, 3, 0],
+                                   [2, 0, 0, 0, 1]])
+        self.tree_str = "((a:1,b:2):4,(c:3,(d:1,e:1):2):3);"
+        self.tree = TreeNode.from_newick(self.tree_str)
+        self.sample_ids = ['A', 'B', 'C']
+        self.taxon_ids = ['a', 'b', 'c', 'd', 'e']
+        # Test case 2
         self.l19_data = np.array([[7, 1, 0, 0, 0, 0, 0, 0, 0],
                                   [4, 2, 0, 0, 0, 1, 0, 0, 0],
                                   [2, 4, 0, 0, 0, 1, 0, 0, 0],
@@ -49,12 +57,10 @@ class BaseFastUniFracTests(TestCase):
                                   [0, 0, 0, 4, 2, 0, 0, 0, 4],
                                   [0, 0, 0, 2, 4, 0, 0, 0, 1],
                                   [0, 0, 0, 1, 7, 0, 0, 0, 0]])
-
         self.l19_tree_str = ("((((tax7:0.1,tax3:0.2):.98,tax8:.3, tax4:.3):.4,"
                              "((tax1:0.3, tax6:.09):0.43,tax2:0.4):0.5):.2,"
                              "(tax9:0.3, endbigtaxon:.08));")
         self.l19_tree = TreeNode.from_newick(self.l19_tree_str)
-
         self.l19_sample_ids = ['sam1', 'sam2', 'sam3', 'sam4', 'sam5', 'sam6',
                                'sam7', 'sam8', 'sam9', 'sam_middle', 'sam11',
                                'sam12', 'sam13', 'sam14', 'sam15', 'sam16',
@@ -67,9 +73,62 @@ class FastUniFracTests(BaseFastUniFracTests):
     """"""
     def test_init(self):
         """Correctly initializes the FastUnifrac object"""
+        # Test case 1
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
+        # Expected envs attribute
+        exp_envs = {'a': {'A': 1, 'C': 2},
+                    'b': {'A': 1, 'B': 1},
+                    'c': {'B': 1},
+                    'd': {'B': 3},
+                    'e': {'C': 1}}
+        self.assertEqual(obs._envs, exp_envs)
+        # Expected tree attribute
+        exp_tree = "((a:1.0,b:2.0):4.0,(c:3.0,(d:1.0,e:1.0):2.0):3.0);"
+        self.assertEqual(str(obs._tree), exp_tree)
+        # Expected node index and nodes attributes
+        exp_node_index, exp_nodes = self.tree.index_tree()
+        self.assertEqual(obs._nodes, exp_nodes)
+        self.assertEqual(obs._node_index.keys(), exp_node_index.keys())
+        for k in obs._node_index:
+            self.assertEqual(str(obs._node_index[k]), str(exp_node_index[k]))
+        # Expected unique envs attribute
+        exp_unique_envs = ['A', 'B', 'C']
+        self.assertEqual(obs._unique_envs, exp_unique_envs)
+        # Expected env to index attribute
+        exp_env_to_index = {'A': 0, 'B': 1, 'C': 2}
+        self.assertEqual(obs._env_to_index, exp_env_to_index)
+        # Expected count array attribute
+        exp_count_array = np.array([[1, 0, 2],
+                                    [1, 1, 0],
+                                    [0, 3, 0],
+                                    [0, 0, 1],
+                                    [0, 1, 0],
+                                    [0, 0, 0],
+                                    [0, 0, 0],
+                                    [0, 0, 0],
+                                    [0, 0, 0]])
+        assert_almost_equal(obs._count_array, exp_count_array)
+        # Expected env names attribute
+        exp_env_names = ['A', 'B', 'C']
+        self.assertEqual(obs._env_names, exp_env_names)
+        # Expected branch lengths attribute
+        exp_branch_lengths = np.array([1., 2., 1., 1., 3., 2., 4., 3., 0.])
+        assert_almost_equal(obs._branch_lengths, exp_branch_lengths)
+        # Expected bound indices attribute
+        exp_bound_indices = [
+            (np.array([0., 0., 0.]), np.array([[0., 3., 0.], [0., 0., 1.]])),
+            (np.array([0., 0., 0.]), np.array([[1., 0., 2.], [1., 1., 0.]])),
+            (np.array([0., 0., 0.]), np.array([[0., 1., 0.], [0., 0., 0.]])),
+            (np.array([0., 0., 0.]), np.array([[0., 0., 0.], [0., 0., 0.]]))]
+        self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
+        for o, e in izip(obs._bound_indices, exp_bound_indices):
+            assert_almost_equal(o[0], e[0])
+            assert_almost_equal(o[1], e[1])
+
+        # Test case 2
         obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
                           self.l19_taxon_ids)
-
         # Expected envs attribute
         exp_envs = {'endbigtaxon': {'sam17': 2, 'sam16': 1,
                                     'sam19': 7, 'sam18': 4},
@@ -88,7 +147,6 @@ class FastUniFracTests(BaseFastUniFracTests):
                     'tax7': {'sam8': 1, 'sam7': 2},
                     'tax6': {'sam3': 1, 'sam2': 1}}
         self.assertEqual(obs._envs, exp_envs)
-
         # Expected tree attribute
         exp_tree = ("((((tax7:0.1,tax3:0.2):0.98,tax8:0.3,tax4:0.3):0.4,"
                     "((tax1:0.3,tax6:0.09):0.43,tax2:0.4):0.5):0.2,"
@@ -208,7 +266,7 @@ class FastUniFracTests(BaseFastUniFracTests):
         pass
 
     def test_bind_to_array(self):
-        """FastUniFrac._bind_to_arry already tested in test_init."""
+        """FastUniFrac._bind_to_array already tested in test_init."""
         pass
 
     def test_traverse_reduce(self):
@@ -218,6 +276,20 @@ class FastUniFracTests(BaseFastUniFracTests):
 
     def test_bool_descendants(self):
         """Correctly updates the bound indices attribute"""
+        # Test case 1
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
+        obs._bool_descendants()
+        exp_bound_indices = [
+            (np.array([0, 1, 1]), np.array([[0, 3, 0], [0, 0, 1]])),
+            (np.array([1, 1, 1]), np.array([[1, 0, 2], [1, 1, 0]])),
+            (np.array([0, 1, 1]), np.array([[0, 1, 0], [0, 1, 1]])),
+            (np.array([1, 1, 1]), np.array([[1, 1, 1], [0, 1, 1]]))]
+        self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
+        for o, e in izip(obs._bound_indices, exp_bound_indices):
+            assert_almost_equal(o[0], e[0])
+            assert_almost_equal(o[1], e[1])
+        # Test case 2
         obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
                           self.l19_taxon_ids)
         obs._bool_descendants()
@@ -266,7 +338,6 @@ class FastUniFracTests(BaseFastUniFracTests):
                         1, 1, 1, 1, 1, 1, 1, 1, 1],
                        [0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
                         0, 0, 0, 0, 0, 0, 0, 0, 0]]))]
-
         self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
         for o, e in izip(obs._bound_indices, exp_bound_indices):
             assert_almost_equal(o[0], e[0])
@@ -274,6 +345,20 @@ class FastUniFracTests(BaseFastUniFracTests):
 
     def test_sum_descendants(self):
         """Correctly updates the bound indices attribute"""
+        # Test case 1
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
+        obs._sum_descendants()
+        exp_bound_indices = [
+            (np.array([0, 3, 1]), np.array([[0, 3, 0], [0, 0, 1]])),
+            (np.array([2, 1, 2]), np.array([[1, 0, 2], [1, 1, 0]])),
+            (np.array([0, 4, 1]), np.array([[0, 1, 0], [0, 3, 1]])),
+            (np.array([2, 5, 3]), np.array([[2, 1, 2], [0, 4, 1]]))]
+        self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
+        for o, e in izip(obs._bound_indices, exp_bound_indices):
+            assert_almost_equal(o[0], e[0])
+            assert_almost_equal(o[1], e[1])
+        # Test case 2
         obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
                           self.l19_taxon_ids)
         obs._sum_descendants()
@@ -329,37 +414,127 @@ class FastUniFracTests(BaseFastUniFracTests):
 
     def test_symetric_matrix(self):
         """Raises an error due to missing metric"""
-        obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
-                          self.l19_taxon_ids)
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
         with self.assertRaises(NotImplementedError):
             obs._symmetric_matrix()
 
     def test_asymmetric_matrix(self):
         """Raises an error due to missing metric"""
-        obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
-                          self.l19_taxon_ids)
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
         with self.assertRaises(NotImplementedError):
             obs._asymmetric_matrix()
 
     def test_metric(self):
         """This is a base class should raise a NotImplementedError"""
-        obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
-                          self.l19_taxon_ids)
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
         with self.assertRaises(NotImplementedError):
             obs._metric(0, 0)
 
     def test_matrix(self):
         """This is a base class should raise a NotImplementedError"""
-        obs = FastUniFrac(self.l19_tree, self.l19_data, self.l19_sample_ids,
-                          self.l19_taxon_ids)
+        obs = FastUniFrac(self.tree, self.abund_mtx, self.sample_ids,
+                          self.taxon_ids)
         with self.assertRaises(NotImplementedError):
             obs.matrix()
 
 
 class UnweightedFastUniFracTests(BaseFastUniFracTests):
     """"""
+    def test_init(self):
+        """"""
+        # Test case 1
+        obs = UnweightedFastUniFrac(self.tree, self.abund_mtx,
+                                    self.sample_ids, self.taxon_ids)
+        exp_bound_indices = [
+            (np.array([0, 1, 1]), np.array([[0, 3, 0], [0, 0, 1]])),
+            (np.array([1, 1, 1]), np.array([[1, 0, 2], [1, 1, 0]])),
+            (np.array([0, 1, 1]), np.array([[0, 1, 0], [0, 1, 1]])),
+            (np.array([1, 1, 1]), np.array([[1, 1, 1], [0, 1, 1]]))]
+        self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
+        for o, e in izip(obs._bound_indices, exp_bound_indices):
+            assert_almost_equal(o[0], e[0])
+            assert_almost_equal(o[1], e[1])
+        # Test case 2
+        obs = UnweightedFastUniFrac(self.l19_tree, self.l19_data,
+                                    self.l19_sample_ids, self.l19_taxon_ids)
+        exp_bound_indices = [
+            (np.array([0, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 1, 1, 1, 1, 1]),
+             np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 2, 1, 0, 0],
+                       [0, 7, 4, 2, 1, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 1, 2, 4, 7, 8]])),
+            (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       1, 1, 1, 0, 0, 0, 0, 0, 0]),
+             np.array([[7, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        4, 2, 1, 0, 0, 0, 0, 0, 0],
+                       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        1, 1, 0, 0, 0, 0, 0, 0, 0]])),
+            (np.array([0, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                       0, 0, 0, 0, 1, 1, 1, 1, 1]),
+             np.array([[0, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 1, 1, 1, 1, 1],
+                       [0, 0, 3, 1, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0],
+                       [0, 1, 2, 4, 7, 8, 7, 4, 2, 1,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0]])),
+            (np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       1, 1, 1, 1, 1, 1, 1, 1, 0]),
+             np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        1, 1, 1, 0, 0, 0, 0, 0, 0],
+                       [1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        2, 4, 7, 8, 7, 4, 2, 1, 0]])),
+            (np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1]),
+             np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                        0, 0, 0, 0, 1, 1, 1, 1, 1],
+                       [1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        1, 1, 1, 1, 1, 1, 1, 1, 0]])),
+            (np.array([0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                       0, 0, 0, 0, 0, 0, 0, 0, 0]),
+             np.array([[0, 0, 0, 0, 0, 0, 0, 4, 1, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0],
+                       [0, 0, 0, 0, 0, 0, 1, 2, 4, 7,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0]])),
+            (np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                       1, 1, 1, 1, 1, 1, 1, 1, 1]),
+             np.array([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                        1, 1, 1, 1, 1, 1, 1, 1, 1],
+                       [0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                        0, 0, 0, 0, 0, 0, 0, 0, 0]]))]
+
+        self.assertEqual(len(obs._bound_indices), len(exp_bound_indices))
+        for o, e in izip(obs._bound_indices, exp_bound_indices):
+            assert_almost_equal(o[0], e[0])
+            assert_almost_equal(o[1], e[1])
+
     def test_matrix(self):
         """"""
+        # Test case 1
+        unif = UnweightedFastUniFrac(self.tree, self.abund_mtx,
+                                     self.sample_ids, self.taxon_ids)
+        obs = unif.matrix()
+        # The object has the correct type
+        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        # Expected matrix ids
+        exp_ids = tuple(sorted(self.sample_ids))
+        self.assertEqual(obs.ids, exp_ids)
+        # Expected dtype
+        self.assertEqual(obs.dtype, np.float64)
+        # Expected matrix data
+        exp_data = np.array([[0., 0.625, 0.6153846153],
+                             [0.625, 0., 0.4705882352],
+                             [0.6153846153, 0.4705882352, 0.]])
+        assert_almost_equal(obs.data, exp_data)
+        # Expected shape
+        self.assertEqual(obs.shape, exp_data.shape)
+        # Expected size
+        self.assertEqual(obs.size, exp_data.size)
+
+        # Test case 2
         unif = UnweightedFastUniFrac(self.l19_tree, self.l19_data,
                                      self.l19_sample_ids, self.l19_taxon_ids)
         obs = unif.matrix()
@@ -455,7 +630,7 @@ class UnweightedFastUniFracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the unweighted unifrac metric"""
+        """UnweightedFastUniFrac._metric already tested on test_matrix"""
         pass
 
 
@@ -463,6 +638,29 @@ class UnnormalizedUnweightedFastUniFracTests(BaseFastUniFracTests):
     """"""
     def test_matrix(self):
         """"""
+        # Test case 1
+        unn_unif = UnnormalizedUnweightedFastUniFrac(self.tree, self.abund_mtx,
+                                                     self.sample_ids,
+                                                     self.taxon_ids)
+        obs = unn_unif.matrix()
+        # The object has the correct type
+        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        # Expected matrix ids
+        exp_ids = tuple(sorted(self.sample_ids))
+        self.assertEqual(obs.ids, exp_ids)
+        # Expected dtype
+        self.assertEqual(obs.dtype, np.float64)
+        # Expected matrix data
+        exp_data = np.array([[0., 0.5882352941, 0.4705882352],
+                             [0.5882352941, 0., 0.4705882352],
+                             [0.4705882352, 0.4705882352, 0.]])
+        assert_almost_equal(obs.data, exp_data)
+        # Expected shape
+        self.assertEqual(obs.shape, exp_data.shape)
+        # Expected size
+        self.assertEqual(obs.size, exp_data.size)
+
+        # Test case 2
         unn_unif = UnnormalizedUnweightedFastUniFrac(self.l19_tree,
                                                      self.l19_data,
                                                      self.l19_sample_ids,
@@ -560,7 +758,9 @@ class UnnormalizedUnweightedFastUniFracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the unnormalized unweighted unifrac metric"""
+        """UnnormalizedUnweightedFastUniFrac._metric already tested on
+        test_matrix
+        """
         pass
 
 
@@ -646,6 +846,15 @@ class WeightedFastUniFracTests(BaseFastUniFracTests):
                         [np.array([0.08]), np.array([0.])]]
         assert_almost_equal(obs._bindings, exp_bindings)
 
+    def test_bind_to_parent_array(self):
+        """WeightedFastUniFrac._bind_to_parent_array already tested on
+        test_init"""
+        pass
+
+    def test_tip_distances(self):
+        """WeightedFastUniFrac._tip_distances already tested on test_init"""
+        pass
+
     def test_matrix(self):
         """"""
         wei_unif = WeightedFastUniFrac(self.l19_tree, self.l19_data,
@@ -730,7 +939,7 @@ class WeightedFastUniFracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the weighted unifrac metric"""
+        """WeightedFastUniFrac._metric already tested on test_matrix"""
         pass
 
 
@@ -835,7 +1044,8 @@ class CorrectedWeightedFastUniFracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the weighted unifrac metric"""
+        """CorrectedWeightedFastUniFrac._metric already tested on test_matrix
+        """
         pass
 
 
@@ -936,7 +1146,7 @@ class GFastUniFracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the weighted unifrac metric"""
+        """GFastUniFrac._metric already tested on test_matrix"""
         pass
 
 
@@ -1038,7 +1248,7 @@ class UnnormalizedGFastUnifracTests(BaseFastUniFracTests):
         self.assertEqual(obs.size, exp_data.size)
 
     def test_metric(self):
-        """Correctly computes the weighted unifrac metric"""
+        """UnnormalizedGFastUnifrac._metric already tested on test_matrix"""
         pass
 
 if __name__ == '__main__':
