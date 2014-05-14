@@ -1,35 +1,48 @@
 #!/usr/bin/env python
-"""Unit tests for the skbio.core.distance module."""
-from __future__ import division
 
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Copyright (c) 2013--, scikit-bio development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file COPYING.txt, distributed with this software.
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
-from itertools import izip
-from StringIO import StringIO
-from tempfile import TemporaryFile
+from __future__ import division
+from future.builtins import zip
+from future.utils.six import StringIO
+
+import tempfile
+from unittest import TestCase, main
 
 import numpy as np
 
-from skbio.core.distance import (randdm, DistanceMatrix,
-                                 SymmetricDistanceMatrix)
-from skbio.core.exception import (DistanceMatrixError,
-                                  DistanceMatrixFormatError, IDMismatchError,
-                                  MissingDataError, MissingHeaderError,
+from skbio.core.distance import randdm, DissimilarityMatrix, DistanceMatrix
+from skbio.core.exception import (DissimilarityMatrixError,
+                                  DistanceMatrixError,
+                                  DissimilarityMatrixFormatError,
                                   MissingIDError)
-from unittest import TestCase, main
+from skbio.util.testing import get_data_path
 
 
-class DistanceMatrixTestData(TestCase):
-    """Test data used in DistanceMatrix and subclass unit tests."""
+class DissimilarityMatrixTestData(TestCase):
+    """Test data used in DissimilarityMatrix and subclass unit tests."""
 
     def setUp(self):
-        """Set up test data for use in distance matrix unit tests."""
+        self.bad_dm_fp = get_data_path('bad_dm.txt')
+        self.dm_2x2_asym_fp = get_data_path('dm_2x2_asym.txt')
+        self.dm_3x3_fp = get_data_path('dm_3x3.txt')
+
+        fd = open(self.bad_dm_fp, 'U')
+        self.bad_dm_f2_lines = ''.join(fd.readlines())
+        fd.close()
+        fd = open(self.dm_2x2_asym_fp, 'U')
+        self.dm_2x2_asym_lines = ''.join(fd.readlines())
+        fd.close()
+        fd = open(self.dm_3x3_fp, 'U')
+        self.dm_3x3_lines = ''.join(fd.readlines())
+        fd.close()
+
         self.dm_1x1_data = [[0.0]]
         self.dm_1x1_f = StringIO(DM_1x1_F)
 
@@ -37,50 +50,41 @@ class DistanceMatrixTestData(TestCase):
         self.dm_2x2_f = StringIO(DM_2x2_F)
 
         self.dm_2x2_asym_data = [[0.0, 1.0], [-2.0, 0.0]]
-        self.dm_2x2_asym_f = StringIO(DM_2x2_ASYM_F)
+        self.dm_2x2_asym_f = StringIO(self.dm_2x2_asym_lines)
 
         self.dm_3x3_data = [[0.0, 0.01, 4.2], [0.01, 0.0, 12.0],
                             [4.2, 12.0, 0.0]]
-        self.dm_3x3_f = StringIO(DM_3x3_F)
-
+        self.dm_3x3_f = StringIO(self.dm_3x3_lines)
         self.dm_3x3_whitespace_f = StringIO('\n'.join(DM_3x3_WHITESPACE_F))
 
-        self.tmp_f = TemporaryFile(prefix='skbio.core.tests.test_distance',
-                                   suffix='.txt')
-
         self.bad_dm_f1 = StringIO(BAD_DM_F1)
-        self.bad_dm_f2 = StringIO(BAD_DM_F2)
+        self.bad_dm_f2 = StringIO(self.bad_dm_f2_lines)
         self.bad_dm_f3 = StringIO(BAD_DM_F3)
         self.bad_dm_f4 = StringIO(BAD_DM_F4)
         self.bad_dm_f5 = StringIO(BAD_DM_F5)
         self.bad_dm_f6 = StringIO(BAD_DM_F6)
 
-    def tearDown(self):
-        """Delete any temporary files."""
-        self.tmp_f.close()
 
-
-class DistanceMatrixTests(DistanceMatrixTestData):
-    """Tests for the DistanceMatrix class."""
-
+class DissimilarityMatrixTests(DissimilarityMatrixTestData):
     def setUp(self):
-        """Create some DistanceMatrix instances for use in tests."""
-        super(DistanceMatrixTests, self).setUp()
+        super(DissimilarityMatrixTests, self).setUp()
 
-        self.dm_1x1 = DistanceMatrix(self.dm_1x1_data, ['a'])
-        self.dm_2x2 = DistanceMatrix(self.dm_2x2_data, ['a', 'b'])
-        self.dm_2x2_asym = DistanceMatrix(self.dm_2x2_asym_data, ['a', 'b'])
-        self.dm_3x3 = DistanceMatrix(self.dm_3x3_data, ['a', 'b', 'c'])
+        self.dm_1x1 = DissimilarityMatrix(self.dm_1x1_data, ['a'])
+        self.dm_2x2 = DissimilarityMatrix(self.dm_2x2_data, ['a', 'b'])
+        self.dm_2x2_asym = DissimilarityMatrix(self.dm_2x2_asym_data,
+                                               ['a', 'b'])
+        self.dm_3x3 = DissimilarityMatrix(self.dm_3x3_data, ['a', 'b', 'c'])
 
         self.dms = [self.dm_1x1, self.dm_2x2, self.dm_2x2_asym, self.dm_3x3]
-        self.dm_f_lines = [DM_1x1_F, DM_2x2_F, DM_2x2_ASYM_F, DM_3x3_F]
+        self.dm_f_lines = [DM_1x1_F, DM_2x2_F, self.dm_2x2_asym_lines,
+                           self.dm_3x3_lines]
         self.dm_fs = [self.dm_1x1_f, self.dm_2x2_f, self.dm_2x2_asym_f,
                       self.dm_3x3_f]
         self.dm_shapes = [(1, 1), (2, 2), (2, 2), (3, 3)]
         self.dm_sizes = [1, 4, 4, 9]
-        self.dm_transposes = [self.dm_1x1, self.dm_2x2,
-                              DistanceMatrix([[0, -2], [1, 0]], ['a', 'b']),
-                              self.dm_3x3]
+        self.dm_transposes = [
+            self.dm_1x1, self.dm_2x2,
+            DissimilarityMatrix([[0, -2], [1, 0]], ['a', 'b']), self.dm_3x3]
         self.dm_redundant_forms = [np.array(self.dm_1x1_data),
                                    np.array(self.dm_2x2_data),
                                    np.array(self.dm_2x2_asym_data),
@@ -90,7 +94,7 @@ class DistanceMatrixTests(DistanceMatrixTestData):
         """Test reading, writing, and reading again works as expected."""
         for dm_f in self.dm_fs:
             # Read.
-            dm1 = DistanceMatrix.from_file(dm_f)
+            dm1 = DissimilarityMatrix.from_file(dm_f)
 
             # Write.
             out_f = StringIO()
@@ -98,132 +102,157 @@ class DistanceMatrixTests(DistanceMatrixTestData):
             out_f.seek(0)
 
             # Read.
-            dm2 = DistanceMatrix.from_file(out_f)
+            dm2 = DissimilarityMatrix.from_file(out_f)
             self.assertEqual(dm1, dm2)
 
     def test_from_file(self):
-        """Should parse and return a valid DistanceMatrix given a file."""
-        for dm_f, dm in izip(self.dm_fs, self.dms):
-            obs = DistanceMatrix.from_file(dm_f)
+        """Should parse and return a valid DissimilarityMatrix given a file."""
+        for dm_f, dm in zip(self.dm_fs, self.dms):
+            obs = DissimilarityMatrix.from_file(dm_f)
             self.assertEqual(obs, dm)
+
+    def test_from_file_with_file_path(self):
+        """Should identify the filepath correctly and parse from it."""
+
+        # should fail with the expected exception
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_fp)
+
+        obs = DissimilarityMatrix.from_file(self.dm_2x2_asym_fp)
+        self.assertEqual(self.dm_2x2_asym, obs)
+        self.assertTrue(isinstance(obs, DissimilarityMatrix))
+
+        obs = DissimilarityMatrix.from_file(self.dm_3x3_fp)
+        self.assertEqual(self.dm_3x3, obs)
+        self.assertTrue(isinstance(obs, DissimilarityMatrix))
 
     def test_from_file_extra_junk(self):
         """Should correctly parse a file with extra whitespace and comments."""
-        obs = DistanceMatrix.from_file(self.dm_3x3_whitespace_f)
+        obs = DissimilarityMatrix.from_file(self.dm_3x3_whitespace_f)
         self.assertEqual(obs, self.dm_3x3)
 
     def test_from_file_list_of_strings(self):
         """Should correctly parse a list of strings."""
-        obs = DistanceMatrix.from_file(DM_3x3_WHITESPACE_F)
+        obs = DissimilarityMatrix.from_file(DM_3x3_WHITESPACE_F)
         self.assertEqual(obs, self.dm_3x3)
 
     def test_from_file_real_file(self):
         """Should correctly parse a real on-disk file."""
-        self.tmp_f.write('\n'.join(DM_3x3_WHITESPACE_F))
-        self.tmp_f.seek(0)
+        with tempfile.TemporaryFile(mode='r+',
+                                    prefix='skbio.core.tests.test_distance',
+                                    suffix='.txt') as fh:
+            fh.write('\n'.join(DM_3x3_WHITESPACE_F))
+            fh.seek(0)
 
-        obs = DistanceMatrix.from_file(self.tmp_f)
+            obs = DissimilarityMatrix.from_file(fh)
         self.assertEqual(obs, self.dm_3x3)
 
     def test_from_file_invalid_input(self):
-        """Raises error on ill-formatted distance matrix file."""
+        """Raises error on ill-formatted dissimilarity matrix file."""
         # Empty dm.
-        with self.assertRaises(MissingHeaderError):
-            _ = DistanceMatrix.from_file([])
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file([])
 
         # Number of values don't match number of IDs.
-        with self.assertRaises(DistanceMatrixFormatError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f1)
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f1)
 
         # Mismatched IDs.
-        with self.assertRaises(IDMismatchError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f2)
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f2)
 
         # Extra data at end.
-        with self.assertRaises(DistanceMatrixFormatError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f3)
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f3)
 
         # Missing data.
-        with self.assertRaises(MissingDataError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f4)
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f4)
 
         # Header, but no data.
-        with self.assertRaises(MissingDataError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f5)
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f5)
 
         # Non-hollow.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix.from_file(self.bad_dm_f6)
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix.from_file(self.bad_dm_f6)
 
     def test_to_file(self):
-        """Should serialize a DistanceMatrix to file."""
-        for dm_f_line, dm in izip(self.dm_f_lines, self.dms):
-            obs_f = StringIO()
-            dm.to_file(obs_f)
-            obs = obs_f.getvalue()
-            obs_f.close()
-
-            self.assertEqual(obs, dm_f_line)
+        """Should serialize a DissimilarityMatrix to file."""
+        for dm_f_line, dm in zip(self.dm_f_lines, self.dms):
+            for file_type in ('file like', 'file name'):
+                if file_type == 'file like':
+                    obs_f = StringIO()
+                    dm.to_file(obs_f)
+                    obs = obs_f.getvalue()
+                    obs_f.close()
+                elif file_type == 'file name':
+                    with tempfile.NamedTemporaryFile('r+') as temp_file:
+                        dm.to_file(temp_file.name)
+                        temp_file.flush()
+                        temp_file.seek(0)
+                        obs = temp_file.read()
+                self.assertEqual(obs, dm_f_line)
 
     def test_init_from_dm(self):
         """Constructs a dm from a dm."""
         ids = ['foo', 'bar', 'baz']
 
-        # DistanceMatrix -> DistanceMatrix
-        exp = DistanceMatrix(self.dm_3x3_data, ids)
-        obs = DistanceMatrix(self.dm_3x3, ids)
+        # DissimilarityMatrix -> DissimilarityMatrix
+        exp = DissimilarityMatrix(self.dm_3x3_data, ids)
+        obs = DissimilarityMatrix(self.dm_3x3, ids)
         self.assertEqual(obs, exp)
         # Test that copy of data is not made.
         self.assertTrue(obs.data is self.dm_3x3.data)
         obs.data[0, 1] = 424242
         self.assertTrue(np.array_equal(obs.data, self.dm_3x3.data))
 
-        # SymmetricDistanceMatrix -> DistanceMatrix
-        exp = DistanceMatrix(self.dm_3x3_data, ids)
-        obs = DistanceMatrix(SymmetricDistanceMatrix(self.dm_3x3_data,
-                                                     ('a', 'b', 'c')), ids)
+        # DistanceMatrix -> DissimilarityMatrix
+        exp = DissimilarityMatrix(self.dm_3x3_data, ids)
+        obs = DissimilarityMatrix(
+            DistanceMatrix(self.dm_3x3_data, ('a', 'b', 'c')), ids)
         self.assertEqual(obs, exp)
 
-        # DistanceMatrix -> SymmetricDistanceMatrix
+        # DissimilarityMatrix -> DistanceMatrix
         with self.assertRaises(DistanceMatrixError):
-            _ = SymmetricDistanceMatrix(self.dm_2x2_asym, ['foo', 'bar'])
+            _ = DistanceMatrix(self.dm_2x2_asym, ['foo', 'bar'])
 
     def test_init_invalid_input(self):
-        """Raises error on invalid distance matrix data / IDs."""
+        """Raises error on invalid dissimilarity matrix data / IDs."""
         # Empty data.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix([], [])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix([], [])
 
         # Another type of empty data.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix(np.empty((0, 0)), [])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix(np.empty((0, 0)), [])
 
         # Invalid number of dimensions.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix([1, 2, 3], ['a'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix([1, 2, 3], ['a'])
 
         # Dimensions don't match.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix([[1, 2, 3]], ['a'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix([[1, 2, 3]], ['a'])
 
         data = [[0, 1], [1, 0]]
 
         # Duplicate IDs.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix(data, ['a', 'a'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix(data, ['a', 'a'])
 
         # Number of IDs don't match dimensions.
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix(data, ['a', 'b', 'c'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix(data, ['a', 'b', 'c'])
 
         # Non-hollow.
         data = [[0.0, 1.0], [1.0, 0.01]]
-        with self.assertRaises(DistanceMatrixError):
-            _ = DistanceMatrix(data, ['a', 'b'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DissimilarityMatrix(data, ['a', 'b'])
 
     def test_data(self):
         """Test retrieving/setting data matrix."""
-        for dm, exp in izip(self.dms, self.dm_redundant_forms):
+        for dm, exp in zip(self.dms, self.dm_redundant_forms):
             obs = dm.data
             self.assertTrue(np.array_equal(obs, exp))
 
@@ -248,10 +277,10 @@ class DistanceMatrixTests(DistanceMatrixTestData):
 
     def test_ids_invalid_input(self):
         """Test setting invalid IDs raises an error."""
-        with self.assertRaises(DistanceMatrixError):
+        with self.assertRaises(DissimilarityMatrixError):
             self.dm_3x3.ids = ['foo', 'bar']
-        # Make sure that we can still use the distance matrix after trying to
-        # be evil.
+        # Make sure that we can still use the dissimilarity matrix after trying
+        # to be evil.
         obs = self.dm_3x3.ids
         self.assertEqual(obs, ('a', 'b', 'c'))
 
@@ -262,17 +291,17 @@ class DistanceMatrixTests(DistanceMatrixTestData):
 
     def test_shape(self):
         """Test retrieving shape of data matrix."""
-        for dm, shape in izip(self.dms, self.dm_shapes):
+        for dm, shape in zip(self.dms, self.dm_shapes):
             self.assertEqual(dm.shape, shape)
 
     def test_size(self):
         """Test retrieving size of data matrix."""
-        for dm, size in izip(self.dms, self.dm_sizes):
+        for dm, size in zip(self.dms, self.dm_sizes):
             self.assertEqual(dm.size, size)
 
     def test_transpose(self):
-        """Test retrieving transpose of distance matrix."""
-        for dm, transpose in izip(self.dms, self.dm_transposes):
+        """Test retrieving transpose of dissimilarity matrix."""
+        for dm, transpose in zip(self.dms, self.dm_transposes):
             self.assertEqual(dm.T, transpose)
             self.assertEqual(dm.transpose(), transpose)
             # We should get a reference to a different object back, even if the
@@ -281,12 +310,12 @@ class DistanceMatrixTests(DistanceMatrixTestData):
 
     def test_redundant_form(self):
         """Test retrieving the data matrix in redundant form."""
-        for dm, redundant in izip(self.dms, self.dm_redundant_forms):
+        for dm, redundant in zip(self.dms, self.dm_redundant_forms):
             obs = dm.redundant_form()
             self.assertTrue(np.array_equal(obs, redundant))
 
     def test_copy(self):
-        """Test correct copying of a DistanceMatrix."""
+        """Test correct copying of a DissimilarityMatrix."""
         copy = self.dm_2x2.copy()
         self.assertEqual(copy, self.dm_2x2)
         self.assertFalse(copy.data is self.dm_2x2.data)
@@ -303,7 +332,7 @@ class DistanceMatrixTests(DistanceMatrixTestData):
         self.assertFalse(np.array_equal(copy.data, self.dm_2x2.data))
 
     def test_str(self):
-        """Test retrieving string representation of a DistanceMatrix."""
+        """Test retrieving string representation of a DissimilarityMatrix."""
         for dm in self.dms:
             obs = str(dm)
             # Do some very light testing here to make sure we're getting a
@@ -312,7 +341,7 @@ class DistanceMatrixTests(DistanceMatrixTestData):
             self.assertTrue(obs)
 
     def test_eq(self):
-        """Test DistanceMatrix equality test functions correctly."""
+        """DissimilarityMatrix equality test functions correctly."""
         for dm in self.dms:
             copy = dm.copy()
             self.assertTrue(dm == dm)
@@ -403,23 +432,23 @@ class DistanceMatrixTests(DistanceMatrixTestData):
             _ = self.dm_3x3[:, 3]
 
     def test_parse_ids(self):
-        """Empty stub: DistanceMatrix._parse_ids tested elsewhere."""
+        """Empty stub: DissimilarityMatrix._parse_ids tested elsewhere."""
         pass
 
     def test_validate(self):
-        """Empty stub: DistanceMatrix._validate already tested elsewhere."""
+        """Empty stub: DissimilarityMatrix._validate tested elsewhere."""
         pass
 
     def test_index_list(self):
-        """Empty stub: DistanceMatrix._index_list already tested elsewhere."""
+        """Empty stub: DissimilarityMatrix._index_list tested elsewhere."""
         pass
 
     def test_is_id_pair(self):
-        """Empty stub: DistanceMatrix._is_id_pair already tested elsewhere."""
+        """Empty stub: DissimilarityMatrix._is_id_pair tested elsewhere."""
         pass
 
     def test_format_ids(self):
-        """Empty stub: DistanceMatrix._format_ids tested elsewhere."""
+        """Empty stub: DissimilarityMatrix._format_ids tested elsewhere."""
         pass
 
     def test_pprint_ids(self):
@@ -435,55 +464,62 @@ class DistanceMatrixTests(DistanceMatrixTestData):
         self.assertEqual(obs, exp)
 
 
-class SymmetricDistanceMatrixTests(DistanceMatrixTestData):
-    """Tests for the SymmetricDistanceMatrix class."""
-
+class DistanceMatrixTests(DissimilarityMatrixTestData):
     def setUp(self):
-        """Create some SymmetricDistanceMatrix instances for use in tests."""
-        super(SymmetricDistanceMatrixTests, self).setUp()
+        super(DistanceMatrixTests, self).setUp()
 
-        self.dm_1x1 = SymmetricDistanceMatrix(self.dm_1x1_data, ['a'])
-        self.dm_2x2 = SymmetricDistanceMatrix(self.dm_2x2_data, ['a', 'b'])
-        self.dm_3x3 = SymmetricDistanceMatrix(self.dm_3x3_data,
-                                              ['a', 'b', 'c'])
+        self.dm_1x1 = DistanceMatrix(self.dm_1x1_data, ['a'])
+        self.dm_2x2 = DistanceMatrix(self.dm_2x2_data, ['a', 'b'])
+        self.dm_3x3 = DistanceMatrix(self.dm_3x3_data, ['a', 'b', 'c'])
 
         self.dms = [self.dm_1x1, self.dm_2x2, self.dm_3x3]
         self.dm_condensed_forms = [np.array([]), np.array([0.123]),
                                    np.array([0.01, 4.2, 12.0])]
 
+    def test_from_file_with_file_path(self):
+        """Should identify the filepath correctly and parse from it."""
+
+        # should fail with the expected exception
+        with self.assertRaises(DissimilarityMatrixFormatError):
+            _ = DistanceMatrix.from_file(self.bad_dm_fp)
+
+        obs = DistanceMatrix.from_file(self.dm_3x3_fp)
+        self.assertEqual(self.dm_3x3, obs)
+        self.assertTrue(isinstance(obs, DistanceMatrix))
+
     def test_from_file_invalid_input(self):
         """Raises error on invalid distance matrix file."""
         # Asymmetric.
         with self.assertRaises(DistanceMatrixError):
-            _ = SymmetricDistanceMatrix.from_file(self.dm_2x2_asym_f)
+            _ = DistanceMatrix.from_file(self.dm_2x2_asym_f)
 
     def test_init_invalid_input(self):
         """Raises error on invalid distance matrix data / IDs."""
         # Asymmetric.
         data = [[0.0, 2.0], [1.0, 0.0]]
         with self.assertRaises(DistanceMatrixError):
-            _ = SymmetricDistanceMatrix(data, ['a', 'b'])
+            _ = DistanceMatrix(data, ['a', 'b'])
 
         # Ensure that the superclass validation is still being performed.
-        with self.assertRaises(DistanceMatrixError):
-            _ = SymmetricDistanceMatrix([[1, 2, 3]], ['a'])
+        with self.assertRaises(DissimilarityMatrixError):
+            _ = DistanceMatrix([[1, 2, 3]], ['a'])
 
     def test_condensed_form(self):
         """Test retrieving the data matrix in condensed form."""
-        for dm, condensed in izip(self.dms, self.dm_condensed_forms):
+        for dm, condensed in zip(self.dms, self.dm_condensed_forms):
             obs = dm.condensed_form()
             self.assertTrue(np.array_equal(obs, condensed))
 
     def test_eq(self):
-        """Test data equality between different distance matrix types."""
-        # Compare SymmetricDistanceMatrix to DistanceMatrix, where both have
-        # the same data and IDs.
-        eq_dm = DistanceMatrix(self.dm_3x3_data, ['a', 'b', 'c'])
+        """Test data equality between different matrix types."""
+        # Compare DistanceMatrix to DissimilarityMatrix, where both have the
+        # same data and IDs.
+        eq_dm = DissimilarityMatrix(self.dm_3x3_data, ['a', 'b', 'c'])
         self.assertTrue(self.dm_3x3 == eq_dm)
         self.assertTrue(eq_dm == self.dm_3x3)
 
     def test_validate(self):
-        """Empty stub: SymmetricDistanceMatrix._validate tested elsewhere."""
+        """Empty stub: DistanceMatrix._validate tested elsewhere."""
         pass
 
 
@@ -513,7 +549,7 @@ class RandomDistanceMatrixTests(TestCase):
         self.assertTrue(found_diff)
 
     def test_ids(self):
-        """Test generating random dist mats with specific IDs."""
+        """Test generating random distance matrices with specific IDs."""
         ids = ['foo', 'bar', 'baz']
         obs = randdm(3, ids=ids)
         self.assertEqual(obs.shape, (3, 3))
@@ -521,10 +557,10 @@ class RandomDistanceMatrixTests(TestCase):
 
     def test_constructor(self):
         """Test generating random dist mats with a specific constructor."""
-        exp = SymmetricDistanceMatrix(np.asarray([[0.0]]), ['1'])
-        obs = randdm(1, constructor=SymmetricDistanceMatrix)
+        exp = DissimilarityMatrix(np.asarray([[0.0]]), ['1'])
+        obs = randdm(1, constructor=DissimilarityMatrix)
         self.assertEqual(obs, exp)
-        self.assertTrue(isinstance(obs, SymmetricDistanceMatrix))
+        self.assertEqual(type(obs), DissimilarityMatrix)
 
     def test_random_fn(self):
         """Test passing a different random function than the default."""
@@ -542,7 +578,7 @@ class RandomDistanceMatrixTests(TestCase):
     def test_invalid_input(self):
         """Test error-handling upon invalid input."""
         # Invalid dimensions.
-        with self.assertRaises(DistanceMatrixError):
+        with self.assertRaises(DissimilarityMatrixError):
             _ = randdm(0)
 
         # Invalid dimensions.
@@ -550,7 +586,7 @@ class RandomDistanceMatrixTests(TestCase):
             _ = randdm(-1)
 
         # Invalid number of IDs.
-        with self.assertRaises(DistanceMatrixError):
+        with self.assertRaises(DissimilarityMatrixError):
             _ = randdm(2, ids=['foo'])
 
 
@@ -562,18 +598,6 @@ DM_1x1_F = "\ta\na\t0.0\n"
 #       0.0  0.123
 #     0.123    0.0
 DM_2x2_F = "\ta\tb\na\t0.0\t0.123\nb\t0.123\t0.0\n"
-
-# 2x2, asymmetric:
-#     0.0 1.0
-#    -2.0 0.0
-DM_2x2_ASYM_F = '\ta\tb\na\t0.0\t1.0\nb\t-2.0\t0.0\n'
-
-# 3x3:
-#      0.0   0.01   4.2
-#     0.01    0.0  12.0
-#      4.2   12.0   0.0
-DM_3x3_F = ("\ta\tb\tc\na\t0.0\t0.01\t4.2\nb\t0.01\t0.0\t12.0\n"
-            "c\t4.2\t12.0\t0.0\n")
 
 # Extra whitespace-only lines throughout. Also has comments before the header.
 DM_3x3_WHITESPACE_F = ['# foo',
@@ -596,9 +620,6 @@ DM_3x3_WHITESPACE_F = ['# foo',
 
 # missing data
 BAD_DM_F1 = 'a\tb\na\t0\t1\nb\t1'
-
-# mismatched IDs
-BAD_DM_F2 = '\ta\tb\nb\t0\t1\na\t1\t0'
 
 # extra data lines
 BAD_DM_F3 = '\ta\tb\na\t0\t1\nb\t1\t0\n  \nfoo\n\n\n'

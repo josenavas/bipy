@@ -1,12 +1,12 @@
-#1!/usr/bin/env python
+#!/usr/bin/env python
 
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Copyright (c) 2013--, scikit-bio development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file COPYING.txt, distributed with this software.
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 from __future__ import division
 
@@ -15,11 +15,10 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-from skbio.core.sequence import (BiologicalSequence, NucleotideSequence,
-                                 DNASequence, RNASequence)
-from skbio.core.alignment import (SequenceCollection, Alignment)
+from skbio.core.sequence import NucleotideSequence, DNASequence, RNASequence
+from skbio.core.alignment import SequenceCollection, Alignment
 from skbio.core.exception import SequenceCollectionError
-from skbio.core.distance import SymmetricDistanceMatrix
+from skbio.core.distance import DistanceMatrix
 
 
 class SequenceCollectionTests(TestCase):
@@ -28,15 +27,15 @@ class SequenceCollectionTests(TestCase):
     def setUp(self):
         """Initialize values to be used in tests
         """
-        self.d1 = DNASequence('GATTACA', identifier="d1")
-        self.d2 = DNASequence('TTG', identifier="d2")
-        self.d1_lower = DNASequence('gattaca', identifier="d1")
-        self.d2_lower = DNASequence('ttg', identifier="d2")
-        self.r1 = RNASequence('GAUUACA', identifier="r1")
-        self.r2 = RNASequence('UUG', identifier="r2")
-        self.r3 = RNASequence('U-----UGCC--', identifier="r3")
+        self.d1 = DNASequence('GATTACA', id="d1")
+        self.d2 = DNASequence('TTG', id="d2")
+        self.d1_lower = DNASequence('gattaca', id="d1")
+        self.d2_lower = DNASequence('ttg', id="d2")
+        self.r1 = RNASequence('GAUUACA', id="r1")
+        self.r2 = RNASequence('UUG', id="r2")
+        self.r3 = RNASequence('U-----UGCC--', id="r3")
 
-        self.i1 = DNASequence('GATXACA', identifier="i1")
+        self.i1 = DNASequence('GATXACA', id="i1")
 
         self.seqs1 = [self.d1, self.d2]
         self.seqs1_lower = [self.d1_lower, self.d2_lower]
@@ -52,6 +51,7 @@ class SequenceCollectionTests(TestCase):
         self.s1_lower = SequenceCollection(self.seqs1_lower)
         self.s2 = SequenceCollection(self.seqs2)
         self.s3 = SequenceCollection(self.seqs3)
+        self.empty = SequenceCollection([])
 
         self.invalid_s1 = SequenceCollection([self.i1])
 
@@ -59,18 +59,12 @@ class SequenceCollectionTests(TestCase):
         """Initialization functions as expected with varied input types
         """
         SequenceCollection(self.seqs1)
-        SequenceCollection(self.seqs1)
-        SequenceCollection(self.seqs1)
-
         SequenceCollection(self.seqs2)
-        SequenceCollection(self.seqs2)
-        SequenceCollection(self.seqs2)
-
         SequenceCollection(self.seqs3)
-        SequenceCollection(self.seqs3)
+        SequenceCollection([])
 
     def test_init_fail(self):
-        """initialization with sequences with overlapping identifiers fails
+        """initialization with sequences with overlapping ids fails
         """
         s1 = [self.d1, self.d1]
         self.assertRaises(SequenceCollectionError, SequenceCollection, s1)
@@ -128,6 +122,9 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(self.s2[0], self.r1)
         self.assertEqual(self.s2[1], self.r2)
 
+        self.assertRaises(IndexError, self.empty.__getitem__, 0)
+        self.assertRaises(KeyError, self.empty.__getitem__, '0')
+
     def test_iter(self):
         """iter functions as expected
         """
@@ -137,7 +134,7 @@ class SequenceCollectionTests(TestCase):
             count += 1
             self.assertEqual(actual, expected)
         self.assertEqual(count, len(self.seqs1))
-        self.assertRaises(StopIteration, s1_iter.next)
+        self.assertRaises(StopIteration, lambda: next(s1_iter))
 
     def test_len(self):
         """len functions as expected
@@ -145,6 +142,7 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(len(self.s1), 2)
         self.assertEqual(len(self.s2), 3)
         self.assertEqual(len(self.s3), 5)
+        self.assertEqual(len(self.empty), 0)
 
     def test_ne(self):
         """inequality operator functions as expected
@@ -177,6 +175,9 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(repr(self.s3),
                          "<SequenceCollection: n=5; "
                          "mean +/- std length=6.40 +/- 3.32>")
+        self.assertEqual(repr(self.empty),
+                         "<SequenceCollection: n=0; "
+                         "mean +/- std length=0.00 +/- 0.00>")
 
     def test_reversed(self):
         """reversed functions as expected
@@ -187,7 +188,31 @@ class SequenceCollectionTests(TestCase):
             count += 1
             self.assertEqual(actual, expected)
         self.assertEqual(count, len(self.seqs1))
-        self.assertRaises(StopIteration, s1_iter.next)
+        self.assertRaises(StopIteration, lambda: next(s1_iter))
+
+    def test_k_word_frequencies(self):
+        """k_word_frequencies functions as expected
+        """
+        expected1 = defaultdict(int)
+        expected1['A'] = 3/7.
+        expected1['C'] = 1/7.
+        expected1['G'] = 1/7.
+        expected1['T'] = 2/7.
+        expected2 = defaultdict(int)
+        expected2['G'] = 1/3.
+        expected2['T'] = 2/3.
+        self.assertEqual(self.s1.k_word_frequencies(k=1),
+                         [expected1, expected2])
+
+        expected1 = defaultdict(int)
+        expected1['GAT'] = 1/2.
+        expected1['TAC'] = 1/2.
+        expected2 = defaultdict(int)
+        expected2['TTG'] = 1/1.
+        self.assertEqual(self.s1.k_word_frequencies(k=3, overlapping=False),
+                         [expected1, expected2])
+
+        self.assertEqual(self.empty.k_word_frequencies(k=1), [])
 
     def test_str(self):
         """str functions as expected
@@ -196,6 +221,8 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(str(self.s1), exp1)
         exp2 = ">r1\nGAUUACA\n>r2\nUUG\n>r3\nU-----UGCC--\n"
         self.assertEqual(str(self.s2), exp2)
+        exp4 = ""
+        self.assertEqual(str(self.empty), exp4)
 
     def test_distribution_stats(self):
         """distribution_stats functions as expected
@@ -215,6 +242,11 @@ class SequenceCollectionTests(TestCase):
         self.assertAlmostEqual(actual3[1], 6.400, 3)
         self.assertAlmostEqual(actual3[2], 3.323, 3)
 
+        actual4 = self.empty.distribution_stats()
+        self.assertEqual(actual4[0], 0)
+        self.assertEqual(actual4[1], 0.0)
+        self.assertEqual(actual4[2], 0.0)
+
     def test_degap(self):
         """degap functions as expected
         """
@@ -230,13 +262,14 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(self.s1.get_seq('d1'), self.d1)
         self.assertEqual(self.s1.get_seq('d2'), self.d2)
 
-    def test_identifiers(self):
-        """identifiers functions as expected
+    def test_ids(self):
+        """ids functions as expected
         """
-        self.assertEqual(sorted(self.s1.identifiers()), ['d1', 'd2'])
-        self.assertEqual(sorted(self.s2.identifiers()), ['r1', 'r2', 'r3'])
-        self.assertEqual(sorted(self.s3.identifiers()),
+        self.assertEqual(self.s1.ids(), ['d1', 'd2'])
+        self.assertEqual(self.s2.ids(), ['r1', 'r2', 'r3'])
+        self.assertEqual(self.s3.ids(),
                          ['d1', 'd2', 'r1', 'r2', 'r3'])
+        self.assertEqual(self.empty.ids(), [])
 
     def test_int_map(self):
         """int_map functions as expected
@@ -249,12 +282,22 @@ class SequenceCollectionTests(TestCase):
         expected2 = {"h-1": "d1", "h-2": "d2"}
         self.assertEqual(self.s1.int_map(prefix='h-'), (expected1, expected2))
 
+    def test_is_empty(self):
+        """is_empty functions as expected
+        """
+        self.assertFalse(self.s1.is_empty())
+        self.assertFalse(self.s2.is_empty())
+        self.assertFalse(self.s3.is_empty())
+
+        self.assertTrue(self.empty.is_empty())
+
     def test_is_valid(self):
         """is_valid functions as expected
         """
         self.assertTrue(self.s1.is_valid())
         self.assertTrue(self.s2.is_valid())
         self.assertTrue(self.s3.is_valid())
+        self.assertTrue(self.empty.is_valid())
 
         self.assertFalse(self.invalid_s1.is_valid())
 
@@ -262,7 +305,7 @@ class SequenceCollectionTests(TestCase):
         """iteritems functions as expected
         """
         self.assertEqual(list(self.s1.iteritems()),
-                         [(s.identifier, s) for s in self.s1])
+                         [(s.id, s) for s in self.s1])
 
     def test_lower(self):
         """lower functions as expected
@@ -275,6 +318,7 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(self.s1.sequence_count(), 2)
         self.assertEqual(self.s2.sequence_count(), 3)
         self.assertEqual(self.s3.sequence_count(), 5)
+        self.assertEqual(self.empty.sequence_count(), 0)
 
     def test_sequence_lengths(self):
         """sequence_lengths functions as expected
@@ -282,6 +326,7 @@ class SequenceCollectionTests(TestCase):
         self.assertEqual(self.s1.sequence_lengths(), [7, 3])
         self.assertEqual(self.s2.sequence_lengths(), [7, 3, 12])
         self.assertEqual(self.s3.sequence_lengths(), [7, 3, 7, 3, 12])
+        self.assertEqual(self.empty.sequence_lengths(), [])
 
     def test_to_fasta(self):
         """to_fasta functions as expected
@@ -300,12 +345,12 @@ class SequenceCollectionTests(TestCase):
 class AlignmentTests(TestCase):
 
     def setUp(self):
-        self.d1 = DNASequence('..ACC-GTTGG..', identifier="d1")
-        self.d2 = DNASequence('TTACCGGT-GGCC', identifier="d2")
-        self.d3 = DNASequence('.-ACC-GTTGC--', identifier="d3")
+        self.d1 = DNASequence('..ACC-GTTGG..', id="d1")
+        self.d2 = DNASequence('TTACCGGT-GGCC', id="d2")
+        self.d3 = DNASequence('.-ACC-GTTGC--', id="d3")
 
-        self.r1 = RNASequence('UUAU-', identifier="r1")
-        self.r2 = RNASequence('ACGUU', identifier="r2")
+        self.r1 = RNASequence('UUAU-', id="r1")
+        self.r2 = RNASequence('ACGUU', id="r2")
 
         self.seqs1 = [self.d1, self.d2, self.d3]
         self.seqs2 = [self.r1, self.r2]
@@ -316,6 +361,7 @@ class AlignmentTests(TestCase):
 
         self.a1 = Alignment(self.seqs1)
         self.a2 = Alignment(self.seqs2)
+        self.empty = Alignment([])
 
     def test_degap(self):
         """degap functions as expected
@@ -338,14 +384,14 @@ class AlignmentTests(TestCase):
         expected = [[0, 6./13, 4./13],
                     [6./13, 0, 7./13],
                     [4./13, 7./13, 0]]
-        expected = SymmetricDistanceMatrix(expected, ['d1', 'd2', 'd3'])
+        expected = DistanceMatrix(expected, ['d1', 'd2', 'd3'])
         actual = self.a1.distances()
         self.assertEqual(actual, expected)
 
     def test_subalignment(self):
         """subalignment functions as expected
         """
-        # keep seqs by identifiers
+        # keep seqs by ids
         actual = self.a1.subalignment(seqs_to_keep=['d1', 'd3'])
         expected = Alignment([self.d1, self.d3])
         self.assertEqual(actual, expected)
@@ -355,7 +401,7 @@ class AlignmentTests(TestCase):
         expected = Alignment([self.d1, self.d3])
         self.assertEqual(actual, expected)
 
-        # keep seqs by identifiers (invert)
+        # keep seqs by ids (invert)
         actual = self.a1.subalignment(seqs_to_keep=['d1', 'd3'],
                                       invert_seqs_to_keep=True)
         expected = Alignment([self.d2])
@@ -369,26 +415,26 @@ class AlignmentTests(TestCase):
 
         # keep positions
         actual = self.a1.subalignment(positions_to_keep=[0, 2, 3])
-        d1 = DNASequence('.AC', identifier="d1")
-        d2 = DNASequence('TAC', identifier="d2")
-        d3 = DNASequence('.AC', identifier="d3")
+        d1 = DNASequence('.AC', id="d1")
+        d2 = DNASequence('TAC', id="d2")
+        d3 = DNASequence('.AC', id="d3")
         expected = Alignment([d1, d2, d3])
         self.assertEqual(actual, expected)
 
         # keep positions (invert)
         actual = self.a1.subalignment(positions_to_keep=[0, 2, 3],
                                       invert_positions_to_keep=True)
-        d1 = DNASequence('.C-GTTGG..', identifier="d1")
-        d2 = DNASequence('TCGGT-GGCC', identifier="d2")
-        d3 = DNASequence('-C-GTTGC--', identifier="d3")
+        d1 = DNASequence('.C-GTTGG..', id="d1")
+        d2 = DNASequence('TCGGT-GGCC', id="d2")
+        d3 = DNASequence('-C-GTTGC--', id="d3")
         expected = Alignment([d1, d2, d3])
         self.assertEqual(actual, expected)
 
         # keep seqs and positions
         actual = self.a1.subalignment(seqs_to_keep=[0, 2],
                                       positions_to_keep=[0, 2, 3])
-        d1 = DNASequence('.AC', identifier="d1")
-        d3 = DNASequence('.AC', identifier="d3")
+        d1 = DNASequence('.AC', id="d1")
+        d3 = DNASequence('.AC', id="d3")
         expected = Alignment([d1, d3])
         self.assertEqual(actual, expected)
 
@@ -397,7 +443,7 @@ class AlignmentTests(TestCase):
                                       positions_to_keep=[0, 2, 3],
                                       invert_seqs_to_keep=True,
                                       invert_positions_to_keep=True)
-        d2 = DNASequence('TCGGT-GGCC', identifier="d2")
+        d2 = DNASequence('TCGGT-GGCC', id="d2")
         expected = Alignment([d2])
         self.assertEqual(actual, expected)
 
@@ -408,41 +454,39 @@ class AlignmentTests(TestCase):
 
         # invalid DNA character
         invalid_seqs1 = [self.d1, self.d2, self.d3,
-                         DNASequence('.-ACC-GTXGC--', identifier="i1")]
+                         DNASequence('.-ACC-GTXGC--', id="i1")]
         self.assertRaises(SequenceCollectionError, Alignment,
                           invalid_seqs1, validate=True)
 
         # invalid lengths (they're not all equal)
         invalid_seqs2 = [self.d1, self.d2, self.d3,
-                         DNASequence('.-ACC-GTGC--', identifier="i2")]
+                         DNASequence('.-ACC-GTGC--', id="i2")]
         self.assertRaises(SequenceCollectionError, Alignment,
                           invalid_seqs2, validate=True)
 
     def test_is_valid(self):
         """is_valid functions as expected
         """
-        self.assertTrue(self.a1.is_valid(), True)
-        self.assertTrue(self.a2.is_valid(), True)
+        self.assertTrue(self.a1.is_valid())
+        self.assertTrue(self.a2.is_valid())
+        self.assertTrue(self.empty.is_valid())
 
         # invalid because of length mismatch
-        d1 = DNASequence('..ACC-GTTGG..', identifier="d1")
-        d2 = DNASequence('TTACCGGT-GGC', identifier="d2")
+        d1 = DNASequence('..ACC-GTTGG..', id="d1")
+        d2 = DNASequence('TTACCGGT-GGC', id="d2")
         self.assertFalse(Alignment([d1, d2]).is_valid())
 
         # invalid because of invalid charaters
-        d1 = DNASequence('..ACC-GTXGG..', identifier="d1")
-        d2 = DNASequence('TTACCGGT-GGCC', identifier="d2")
+        d1 = DNASequence('..ACC-GTXGG..', id="d1")
+        d2 = DNASequence('TTACCGGT-GGCC', id="d2")
         self.assertFalse(Alignment([d1, d2]).is_valid())
 
     def test_iter_positions(self):
         """iter_positions functions as expected
         """
         actual = list(self.a2.iter_positions())
-        expected = [map(RNASequence, list('UA')),
-                    map(RNASequence, list('UC')),
-                    map(RNASequence, list('AG')),
-                    map(RNASequence, list('UU')),
-                    map(RNASequence, list('-U'))]
+        expected = [[RNASequence(j) for j in i] for i in
+                    ['UA', 'UC', 'AG', 'UU', '-U']]
         self.seqs2_t = [('r1', 'UUAU-'), ('r2', 'ACGUU')]
         self.assertEqual(actual, expected)
 
@@ -458,17 +502,19 @@ class AlignmentTests(TestCase):
     def test_majority_consensus(self):
         """majority_consensus functions as expected
         """
-        d1 = DNASequence('TTT', identifier="d1")
-        d2 = DNASequence('TT-', identifier="d2")
-        d3 = DNASequence('TC-', identifier="d3")
+        d1 = DNASequence('TTT', id="d1")
+        d2 = DNASequence('TT-', id="d2")
+        d3 = DNASequence('TC-', id="d3")
         a1 = Alignment([d1, d2, d3])
         self.assertEqual(a1.majority_consensus(), DNASequence('TT-'))
 
-        d1 = DNASequence('T', identifier="d1")
-        d2 = DNASequence('A', identifier="d2")
+        d1 = DNASequence('T', id="d1")
+        d2 = DNASequence('A', id="d2")
         a1 = Alignment([d1, d2])
         self.assertTrue(a1.majority_consensus() in
                         [DNASequence('T'), DNASequence('A')])
+
+        self.assertEqual(self.empty.majority_consensus(), '')
 
     def test_omit_gap_positions(self):
         """omitting gap positions functions as expected
@@ -477,15 +523,19 @@ class AlignmentTests(TestCase):
         self.assertEqual(self.a2.omit_gap_positions(1.0), expected)
         self.assertEqual(self.a2.omit_gap_positions(0.51), expected)
 
-        r1 = RNASequence('UUAU', identifier="r1")
-        r2 = RNASequence('ACGU', identifier="r2")
+        r1 = RNASequence('UUAU', id="r1")
+        r2 = RNASequence('ACGU', id="r2")
         expected = Alignment([r1, r2])
         self.assertEqual(self.a2.omit_gap_positions(0.49), expected)
 
-        r1 = RNASequence('UUAU', identifier="r1")
-        r2 = RNASequence('ACGU', identifier="r2")
+        r1 = RNASequence('UUAU', id="r1")
+        r2 = RNASequence('ACGU', id="r2")
         expected = Alignment([r1, r2])
         self.assertEqual(self.a2.omit_gap_positions(0.0), expected)
+
+        self.assertEqual(self.empty.omit_gap_positions(0.0), self.empty)
+        self.assertEqual(self.empty.omit_gap_positions(0.49), self.empty)
+        self.assertEqual(self.empty.omit_gap_positions(1.0), self.empty)
 
     def test_omit_gap_sequences(self):
         """omitting gap sequences functions as expected
@@ -497,6 +547,10 @@ class AlignmentTests(TestCase):
         expected = Alignment([self.r2])
         self.assertEqual(self.a2.omit_gap_sequences(0.19), expected)
 
+        self.assertEqual(self.empty.omit_gap_sequences(0.0), self.empty)
+        self.assertEqual(self.empty.omit_gap_sequences(0.2), self.empty)
+        self.assertEqual(self.empty.omit_gap_sequences(1.0), self.empty)
+
     def test_position_counters(self):
         """position_counters functions as expected
         """
@@ -507,6 +561,8 @@ class AlignmentTests(TestCase):
                     Counter({'-': 1, 'U': 1})]
         self.assertEqual(self.a2.position_counters(), expected)
 
+        self.assertEqual(self.empty.position_counters(), [])
+
     def test_position_frequencies(self):
         """computing position frequencies functions as expected
         """
@@ -516,6 +572,8 @@ class AlignmentTests(TestCase):
                     defaultdict(int, {'U': 1.0}),
                     defaultdict(int, {'-': 0.5, 'U': 0.5})]
         self.assertEqual(self.a2.position_frequencies(), expected)
+
+        self.assertEqual(self.empty.position_frequencies(), [])
 
     def test_position_entropies(self):
         """computing positional uncertainties functions as expected
@@ -531,36 +589,33 @@ class AlignmentTests(TestCase):
         np.testing.assert_almost_equal(self.a2.position_entropies(base=2),
                                        expected, 5)
 
-    def test_sequence_frequencies(self):
-        """sequence_frequencies functions as expected
+        np.testing.assert_almost_equal(self.empty.position_entropies(base=2),
+                                       [])
+
+    def test_k_word_frequencies(self):
+        """k_word_frequencies functions as expected
         """
         expected = [defaultdict(int, {'U': 3/5, 'A': 1/5, '-': 1/5}),
                     defaultdict(int, {'A': 1/5, 'C': 1/5, 'G': 1/5, 'U': 2/5})]
-        actual = self.a2.sequence_frequencies()
+        actual = self.a2.k_word_frequencies(k=1)
         for a, e in zip(actual, expected):
-            a_keys = a.keys()
-            a_keys.sort()
-            a_values = a.values()
-            a_values.sort()
-            e_keys = e.keys()
-            e_keys.sort()
-            e_values = e.values()
-            e_values.sort()
-            self.assertEqual(a_keys, e_keys, 5)
-            np.testing.assert_almost_equal(a_values, e_values, 5)
+            self.assertEqual(sorted(a), sorted(e), 5)
+            np.testing.assert_almost_equal(sorted(a.values()),
+                                           sorted(e.values()), 5)
 
     def test_sequence_length(self):
         """sequence_length functions as expected
         """
         self.assertEqual(self.a1.sequence_length(), 13)
         self.assertEqual(self.a2.sequence_length(), 5)
+        self.assertEqual(self.empty.sequence_length(), 0)
 
     def test_to_phylip(self):
         """to_phylip functions as expected
         """
-        d1 = DNASequence('..ACC-GTTGG..', identifier="d1")
-        d2 = DNASequence('TTACCGGT-GGCC', identifier="d2")
-        d3 = DNASequence('.-ACC-GTTGC--', identifier="d3")
+        d1 = DNASequence('..ACC-GTTGG..', id="d1")
+        d2 = DNASequence('TTACCGGT-GGCC', id="d2")
+        d3 = DNASequence('.-ACC-GTTGC--', id="d3")
         a = Alignment([d1, d2, d3])
 
         phylip_str, id_map = a.to_phylip(map_labels=False)
@@ -576,9 +631,9 @@ class AlignmentTests(TestCase):
     def test_to_phylip_map_labels(self):
         """to_phylip functions as expected with label mapping
         """
-        d1 = DNASequence('..ACC-GTTGG..', identifier="d1")
-        d2 = DNASequence('TTACCGGT-GGCC', identifier="d2")
-        d3 = DNASequence('.-ACC-GTTGC--', identifier="d3")
+        d1 = DNASequence('..ACC-GTTGG..', id="d1")
+        d2 = DNASequence('TTACCGGT-GGCC', id="d2")
+        d3 = DNASequence('.-ACC-GTTGC--', id="d3")
         a = Alignment([d1, d2, d3])
 
         phylip_str, id_map = a.to_phylip(map_labels=True, label_prefix="s")
@@ -596,11 +651,13 @@ class AlignmentTests(TestCase):
         """
         self.assertTrue(self.a1._validate_lengths())
         self.assertTrue(self.a2._validate_lengths())
+        self.assertTrue(self.empty._validate_lengths())
+
         self.assertTrue(Alignment([
-            DNASequence('TTT', identifier="d1")])._validate_lengths())
+            DNASequence('TTT', id="d1")])._validate_lengths())
         self.assertFalse(Alignment([
-            DNASequence('TTT', identifier="d1"),
-            DNASequence('TT', identifier="d2")])._validate_lengths())
+            DNASequence('TTT', id="d1"),
+            DNASequence('TT', id="d2")])._validate_lengths())
 
 
 if __name__ == "__main__":

@@ -86,15 +86,17 @@ Create a new trie with a list of sequences
 >>> t.prefix_map
 {'s3': [], 's2': [], 's1': ['s0', 's5'], 's7': [], 's6': [], 's4': []}
 """
-from __future__ import division
 
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 # Copyright (c) 2013--, scikit-bio development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file COPYING.txt, distributed with this software.
-#-----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+
+from __future__ import division
+from future.utils import viewitems
 
 
 class _CompressedNode(object):
@@ -161,7 +163,7 @@ class _CompressedNode(object):
             # get largest group
             n = -1
             key_largest = None
-            for key, value in mapping.iteritems():
+            for key, value in viewitems(mapping):
                 if len(value) > n:
                     n = len(value)
                     key_largest = key
@@ -238,11 +240,11 @@ class _CompressedNode(object):
         object
             The value attached to the key
         """
-        #key exhausted
+        # key exhausted
         if len(key) == 0:
             return self.values
 
-        #find matching part of key and node_key
+        # find matching part of key and node_key
         min_length = min(len(key), len(self.key))
         keys_diff = False
         index = 0
@@ -253,7 +255,7 @@ class _CompressedNode(object):
         if keys_diff:
             return []
         elif index == len(key):
-            #key and node_key match exactly
+            # key and node_key match exactly
             return self.values
         else:
             node = self.children.get(key[index])
@@ -263,7 +265,7 @@ class _CompressedNode(object):
         return []
 
 
-class CompressedTrie:
+class CompressedTrie(object):
     """ A compressed Trie for a list of (key, value) pairs
 
     Parameters
