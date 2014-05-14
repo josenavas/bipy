@@ -13,9 +13,9 @@ import numpy as np
 from numpy.testing import assert_almost_equal
 from itertools import izip
 
-from skbio.core.distance import SymmetricDistanceMatrix, DistanceMatrix
+from skbio.core.distance import DistanceMatrix, DissimilarityMatrix
 from skbio.core.tree import TreeNode
-from skbio.maths.unifrac.fast_unifrac import (FastUniFrac,
+from skbio.math.unifrac.fast_unifrac import (FastUniFrac,
                                               UnweightedFastUniFrac,
                                               WeightedFastUniFrac,
                                               CorrectedWeightedFastUniFrac,
@@ -518,7 +518,7 @@ class UnweightedFastUniFracTests(BaseFastUniFracTests):
                                      self.sample_ids, self.taxon_ids)
         obs = unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -539,7 +539,7 @@ class UnweightedFastUniFracTests(BaseFastUniFracTests):
                                      self.l19_sample_ids, self.l19_taxon_ids)
         obs = unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -644,7 +644,7 @@ class UnnormalizedUnweightedFastUniFracTests(BaseFastUniFracTests):
                                                      self.taxon_ids)
         obs = unn_unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -667,7 +667,7 @@ class UnnormalizedUnweightedFastUniFracTests(BaseFastUniFracTests):
                                                      self.l19_taxon_ids)
         obs = unn_unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -861,7 +861,7 @@ class WeightedFastUniFracTests(BaseFastUniFracTests):
                                        self.l19_sample_ids, self.l19_taxon_ids)
         obs = wei_unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -953,7 +953,7 @@ class CorrectedWeightedFastUniFracTests(BaseFastUniFracTests):
                                                      self.l19_taxon_ids)
         obs = corr_wei_unif.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), SymmetricDistanceMatrix)
+        self.assertEqual(type(obs), DistanceMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -1058,7 +1058,7 @@ class GFastUniFracTests(BaseFastUniFracTests):
                               self.l19_sample_ids, self.l19_taxon_ids)
         obs = g_unig.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), DistanceMatrix)
+        self.assertEqual(type(obs), DissimilarityMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)
@@ -1160,7 +1160,7 @@ class UnnormalizedGFastUnifracTests(BaseFastUniFracTests):
                                              self.l19_taxon_ids)
         obs = un_g_unig.matrix()
         # The object has the correct type
-        self.assertEqual(type(obs), DistanceMatrix)
+        self.assertEqual(type(obs), DissimilarityMatrix)
         # Expected matrix ids
         exp_ids = tuple(sorted(self.l19_sample_ids))
         self.assertEqual(obs.ids, exp_ids)

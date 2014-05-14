@@ -13,8 +13,8 @@ from __future__ import division
 
 import numpy as np
 
-from skbio.core.distance import SymmetricDistanceMatrix, DistanceMatrix
-from skbio.maths.unifrac.metrics import (unweighted_unifrac,
+from skbio.core.distance import DistanceMatrix, DissimilarityMatrix
+from skbio.math.unifrac.metrics import (unweighted_unifrac,
                                          unnormalized_unweighted_unifrac,
                                          weighted_unifrac,
                                          corrected_weighted_unifrac,
@@ -104,7 +104,7 @@ class FastUniFrac(object):
 
     def _make_subtree(self):
         """Prune the tree to only include the tips seen on envs"""
-        wanted = set(self._envs.keys())
+        wanted = set(self._envs)
 
         def delete_test(node):
             if node.is_tip() and node.name not in wanted:
@@ -182,7 +182,7 @@ class FastUniFrac(object):
         self._traverse_reduce(np.sum)
 
     def _symmetric_matrix(self):
-        """Returns a SymmetricDistanceMatrix with the UniFrac distances"""
+        """Returns a DistanceMatrix with the UniFrac distances"""
         num_cols = self._count_array.shape[-1]
         cols = [self._count_array[:, i] for i in range(num_cols)]
         result = np.zeros((num_cols, num_cols), float)
@@ -196,7 +196,7 @@ class FastUniFrac(object):
             result[i, :j+1] = row_result
         # can't use += because shared memory between a and transpose(a)
         result = result + np.transpose(result)
-        return SymmetricDistanceMatrix(result, self._env_names)
+        return DistanceMatrix(result, self._env_names)
 
     def _asymmetric_matrix(self):
         """Returns a DistanceMatrix with the UniFrac distances"""
@@ -207,7 +207,7 @@ class FastUniFrac(object):
             first_col = cols[i]
             result[i] = [self._metric(first_col, cols[j])
                          for j in range(num_cols)]
-        return DistanceMatrix(result, self._env_names)
+        return DissimilarityMatrix(result, self._env_names)
 
     def _metric(self, i, j):
         """Should be implemented by the subclasses"""
@@ -280,7 +280,7 @@ class WeightedFastUniFrac(FastUniFrac):
     def __init__(self, t, abund_mtx, sample_ids, taxon_ids, **kwargs):
         super(WeightedFastUniFrac, self).__init__(t, abund_mtx, sample_ids,
                                                   taxon_ids, **kwargs)
-        self._tip_indices = [n._leaf_index for n in self._tree.tips()]
+        self._tip_indices = [n.id for n in self._tree.tips()]
         self._sum_descendants()
         self._tip_ds = self._branch_lengths.copy()[:, np.newaxis]
         self._bind_to_parent_array()
@@ -299,8 +299,8 @@ class WeightedFastUniFrac(FastUniFrac):
         self._bindings = []
         for n in self._tree.traverse(self_before=True, self_after=False):
             if n is not self._tree:
-                self._bindings.append([self._tip_ds[n._leaf_index],
-                                       self._tip_ds[n.parent._leaf_index]])
+                self._bindings.append([self._tip_ds[n.id],
+                                       self._tip_ds[n.parent.id]])
 
     def _tip_distances(self):
         """Sets each tip to its distance from the root"""
@@ -336,7 +336,7 @@ class WeightedFastUniFrac(FastUniFrac):
                 row_result.append(curr)
             result[i, :j+1] = row_result
         result = result + np.transpose(result)
-        return SymmetricDistanceMatrix(result, self._env_names)
+        return DistanceMatrix(result, self._env_names)
 
 
 class CorrectedWeightedFastUniFrac(WeightedFastUniFrac):
