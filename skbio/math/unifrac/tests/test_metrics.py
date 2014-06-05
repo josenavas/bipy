@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Copyright (c) 2013--, scikit-bio development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
 # The full license is in the file COPYING.txt, distributed with this software.
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 from unittest import TestCase, main
 import numpy as np
 from numpy.testing import assert_almost_equal
 
-from skbio.maths.unifrac.metrics import (unweighted_unifrac,
-                                         unnormalized_unweighted_unifrac,
-                                         weighted_unifrac,
-                                         corrected_weighted_unifrac,
-                                         G, unnormalized_G)
+from skbio.math.unifrac.metrics import (unweighted_unifrac,
+                                        unnormalized_unweighted_unifrac,
+                                        weighted_unifrac,
+                                        corrected_weighted_unifrac,
+                                        G, unnormalized_G)
 
 
 class MetricsTests(TestCase):
